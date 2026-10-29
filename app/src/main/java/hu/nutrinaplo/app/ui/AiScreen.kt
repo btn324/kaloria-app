@@ -218,11 +218,23 @@ fun AiScreen(vm: MainViewModel, photoMode: Boolean, onBack: () -> Unit, onDone: 
                 is AiState.Loading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                     CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(12.dp))
-                    Text("Az AI elemzi az ételt…")
+                    Column {
+                        Text("Az AI elemzi az ételt…", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Általában 5–20 másodperc.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 is AiState.Error -> AppCard {
                     Text("Hiba", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = AppColors.Deficient)
                     Text(s.message, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        val b = bitmap
+                        if (photoMode && b != null) analyzeBitmap(b) else if (!photoMode && hint.isNotBlank()) vm.analyzeAi(hint, null)
+                    }) { Text("Újrapróbálás") }
                 }
                 is AiState.Done -> {
                     if (s.note.isNotBlank()) {

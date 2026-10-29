@@ -322,7 +322,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 _ai.value = AiState.Done(cands, res.note)
             } catch (e: Exception) {
-                _ai.value = AiState.Error(e.message ?: "Ismeretlen hiba")
+                _ai.value = AiState.Error(Gemini.friendlyError(e))
             }
         }
     }
@@ -338,6 +338,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         chosen.forEach { addEntry(it.food, it.grams, meal) }
         toast("${chosen.size} tétel hozzáadva.")
         _ai.value = AiState.Idle
+    }
+
+    /** API-kulcs ellenőrzés állapota: null = nincs, "..." = folyamatban, egyébként eredmény szöveg. */
+    private val _aiTest = MutableStateFlow<Pair<Boolean, String>?>(null)
+    val aiTest: StateFlow<Pair<Boolean, String>?> = _aiTest
+    private val _aiTesting = MutableStateFlow(false)
+    val aiTesting: StateFlow<Boolean> = _aiTesting
+
+    fun testAi() {
+        val p = _data.value.profile
+        _aiTesting.value = true
+        _aiTest.value = null
+        viewModelScope.launch {
+            try {
+                val model = withContext(Dispatchers.IO) { Gemini.test(p.geminiKey, p.geminiModel) }
+                _aiTest.value = true to "Működik! ✓ (modell: $model)"
+            } catch (e: Exception) {
+                _aiTest.value = false to Gemini.friendlyError(e)
+            } finally {
+                _aiTesting.value = false
+            }
+        }
     }
 
     fun resetAi() {

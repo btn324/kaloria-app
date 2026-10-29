@@ -347,11 +347,27 @@ fun ProfileScreen(vm: MainViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
+                val testing by vm.aiTesting.collectAsState()
+                val test by vm.aiTest.collectAsState()
+                OutlinedButton(
+                    onClick = { vm.testAi() },
+                    enabled = p.geminiKey.isNotBlank() && !testing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (testing) "Ellenőrzés…" else "Kulcs ellenőrzése") }
+                test?.let { (ok, msg) ->
+                    Text(
+                        msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (ok) AppColors.Ok else AppColors.Deficient,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = p.geminiModel,
                     onValueChange = { set(p.copy(geminiModel = it.trim())) },
                     label = { Text("Modell") },
-                    supportingText = { Text("Alapértelmezett: gemini-flash-latest (mindig a legújabb ingyenes Flash modell)") },
+                    supportingText = { Text("Alapértelmezett: gemini-flash-latest. Ha nem elérhető vagy túlterhelt, az app automatikusan másik ingyenes modellt próbál.") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )

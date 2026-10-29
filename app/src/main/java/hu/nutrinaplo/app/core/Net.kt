@@ -18,21 +18,23 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class NetException(message: String) : IOException(message)
+class NetException(message: String, val code: Int = 0) : IOException(message)
 
 object Http {
     private const val UA = "NutriNaplo/1.0 (Android; szemelyes hasznalat)"
 
     fun get(url: String): String = request(url, null)
 
-    fun postJson(url: String, body: String): String = request(url, body)
+    fun postJson(url: String, body: String, headers: Map<String, String> = emptyMap(), readTimeoutMs: Int = 60000): String =
+        request(url, body, headers, readTimeoutMs)
 
-    private fun request(url: String, body: String?): String {
+    private fun request(url: String, body: String?, headers: Map<String, String> = emptyMap(), readTimeoutMs: Int = 30000): String {
         val c = URL(url).openConnection() as HttpURLConnection
         try {
             c.connectTimeout = 15000
-            c.readTimeout = 60000
+            c.readTimeout = readTimeoutMs
             c.setRequestProperty("User-Agent", UA)
+            for ((k, v) in headers) c.setRequestProperty(k, v)
             c.setRequestProperty("Accept", "application/json")
             if (body != null) {
                 c.requestMethod = "POST"
@@ -44,7 +46,7 @@ object Http {
             val stream = if (code in 200..299) c.inputStream else c.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
             if (code !in 200..299) {
-                throw NetException("HTTP $code: " + text.take(300))
+                throw NetException("HTTP $code: " + text.take(400), code)
             }
             return text
         } finally {
@@ -194,16 +196,32 @@ Válaszolj KIZÁRÓLAG ebben a JSON formátumban:
 Ha nincs étel a bemeneten, adj üres items listát és írd le a note mezőben, miért.
 """
 
-    private fun endpoint(model: String, key: String) =
-        "https://generativelanguage.googleapis.com/v1beta/models/${model.trim()}:generateContent?key=${key.trim()}"
+    const val DEFAULT_MODEL = "gemini-flash-latest"
 
-    fun buildRequest(text: String?, imageBase64: String?, mime: String = "image/jpeg"): String {
+    /** Tartalék modellek, ha a választott nem elérhető / túlterhelt. */
+    private val FALLBACK_MODELS = listOf("gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite")
+
+    private fun endpoint(model: String) =
+        "https://generativelanguage.googleapis.com/v1beta/models/${model.trim().removePrefix("models/")}:generateContent"
+
+    /** A "gondolkodás" kikapcsolása a gyors válaszért – a modellcsaládtól függően más-más mezővel. */
+    private enum class Thinking { LEVEL_MINIMAL, BUDGET_ZERO, NONE }
+
+    fun buildRequest(
+        text: String?,
+        imageBase64: String?,
+        mime: String = "image/jpeg",
+        prompt: String = PROMPT.trim(),
+    ): String = buildRequest(text, imageBase64, mime, prompt, Thinking.NONE)
+
+    private fun buildRequest(text: String?, imageBase64: String?, mime: String, prompt: String, thinking: Thinking): String {
         val body = buildJsonObject {
             put("contents", buildJsonArray {
                 add(buildJsonObject {
+                    put("role", "user")
                     put("parts", buildJsonArray {
                         add(buildJsonObject {
-                            put("text", PROMPT.trim() + (if (text.isNullOrBlank()) "" else "\n\nA felhasználó leírása: $text"))
+                            put("text", prompt + (if (text.isNullOrBlank()) "" else "\n\nA felhasználó leírása: $text"))
                         })
                         if (imageBase64 != null) {
                             add(buildJsonObject {
@@ -217,17 +235,91 @@ Ha nincs étel a bemeneten, adj üres items listát és írd le a note mezőben,
                 })
             })
             put("generationConfig", buildJsonObject {
-                put("response_mime_type", "application/json")
+                put("responseMimeType", "application/json")
                 put("temperature", 0.2)
+                put("maxOutputTokens", 4096)
+                when (thinking) {
+                    Thinking.LEVEL_MINIMAL -> put("thinkingConfig", buildJsonObject { put("thinkingLevel", "minimal") })
+                    Thinking.BUDGET_ZERO -> put("thinkingConfig", buildJsonObject { put("thinkingBudget", 0) })
+                    Thinking.NONE -> {}
+                }
             })
         }
         return body.toString()
     }
 
+    /** Hibák érthető magyar szövegre fordítása. */
+    fun friendlyError(e: Throwable): String {
+        val msg = e.message ?: ""
+        return when {
+            e is java.net.SocketTimeoutException ->
+                "Az AI nem válaszolt időben. Ellenőrizd az internetkapcsolatot, és próbáld újra."
+            e is java.net.UnknownHostException -> "Nincs internetkapcsolat."
+            e is NetException && (msg.contains("API_KEY_INVALID") || msg.contains("API key not valid")) ->
+                "Érvénytelen API-kulcs. Ellenőrizd a Profil → AI ételfelismerés résznél (pontosan másold be, szóköz nélkül)."
+            e is NetException && e.code == 403 ->
+                "A kulcs nem jogosult a Gemini API használatára. Hozz létre új kulcsot az aistudio.google.com/apikey oldalon."
+            e is NetException && e.code == 429 ->
+                "Elérted az ingyenes keret percenkénti vagy napi limitjét. Várj egy kicsit, és próbáld újra."
+            e is NetException && e.code in 500..599 -> "A Google AI szolgáltatás most túlterhelt. Próbáld újra pár perc múlva."
+            e is NetException && msg.contains("location is not supported", ignoreCase = true) ->
+                "Az ingyenes Gemini API ebből az országból nem érhető el."
+            else -> msg.ifBlank { "Ismeretlen hiba" }
+        }
+    }
+
+    private fun call(key: String, model: String, text: String?, imageBase64: String?, prompt: String): String {
+        var lastError: Exception? = null
+        // 1) gondolkodás minimálisra (Gemini 3), 2) kikapcsolva (Gemini 2.5), 3) alapértelmezés
+        for (t in listOf(Thinking.LEVEL_MINIMAL, Thinking.BUDGET_ZERO, Thinking.NONE)) {
+            try {
+                return Http.postJson(
+                    endpoint(model),
+                    buildRequest(text, imageBase64, "image/jpeg", prompt, t),
+                    headers = mapOf("x-goog-api-key" to key.trim()),
+                    readTimeoutMs = 90000,
+                )
+            } catch (e: NetException) {
+                lastError = e
+                // csak "hibás kérés" esetén próbáljuk másik beállítással ugyanazt a modellt
+                if (e.code != 400 || e.message?.contains("API key", ignoreCase = true) == true) throw e
+            }
+        }
+        throw lastError ?: NetException("Ismeretlen hiba")
+    }
+
+    /** Kérés a választott modellel; ha az nem érhető el / túlterhelt / lassú, a tartalék modellekkel. */
+    private fun callWithFallback(key: String, model: String, text: String?, imageBase64: String?, prompt: String): String {
+        val models = (listOf(model.ifBlank { DEFAULT_MODEL }) + FALLBACK_MODELS).distinct()
+        var lastError: Exception? = null
+        val start = System.currentTimeMillis()
+        for (m in models) {
+            if (lastError != null && System.currentTimeMillis() - start > 100_000) break
+            try {
+                return call(key, m, text, imageBase64, prompt)
+            } catch (e: Exception) {
+                lastError = e
+                val retryable = e is java.net.SocketTimeoutException ||
+                    (e is NetException && (e.code == 404 || e.code == 429 || e.code in 500..599 ||
+                        (e.code == 400 && e.message?.contains("API key", ignoreCase = true) != true)))
+                if (!retryable) throw e
+            }
+        }
+        throw lastError ?: NetException("Ismeretlen hiba")
+    }
+
     fun analyze(key: String, model: String, text: String?, imageBase64: String?): AiResult {
-        if (key.isBlank()) throw NetException("Nincs megadva Gemini API-kulcs (Profil → AI beállítások).")
-        val resp = Http.postJson(endpoint(model.ifBlank { "gemini-flash-latest" }, key), buildRequest(text, imageBase64))
+        if (key.isBlank()) throw NetException("Nincs megadva Gemini API-kulcs (Profil → AI ételfelismerés).")
+        val resp = callWithFallback(key, model, text, imageBase64, PROMPT.trim())
         return parseResponse(resp)
+    }
+
+    /** Kulcs ellenőrzése egy apró kéréssel. Siker esetén a működő modell nevét adja vissza. */
+    fun test(key: String, model: String): String {
+        if (key.isBlank()) throw NetException("Nincs megadva API-kulcs.")
+        val resp = callWithFallback(key, model, null, null, "Válaszolj ezzel a JSON-nel: {\"ok\":true}")
+        val root = json.parseToJsonElement(resp).jsonObject
+        return (root["modelVersion"] as? JsonPrimitive)?.contentOrNull ?: model
     }
 
     fun parseResponse(resp: String): AiResult {
