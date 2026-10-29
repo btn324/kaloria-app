@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.Icecream
 import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.WaterDrop
@@ -111,6 +113,7 @@ fun HomeScreen(
     vm: MainViewModel,
     onAdd: (Int) -> Unit,
     onOpenNutrients: () -> Unit,
+    onReminders: () -> Unit,
 ) {
     val data by vm.data.collectAsState()
     val date by vm.date.collectAsState()
@@ -159,6 +162,8 @@ fun HomeScreen(
                 glassMl = p.glassMl,
                 onAdd = { vm.addWater(p.glassMl) },
                 onRemove = { vm.addWater(-p.glassMl) },
+                remindersOn = data.reminders.enabled && data.reminders.waterEnabled,
+                onReminders = onReminders,
             )
         }
         item {
@@ -429,7 +434,15 @@ private fun HeroMacro(label: String, v: Pair<Double, Double>, modifier: Modifier
 }
 
 @Composable
-private fun WaterCard(water: Int, goal: Int, glassMl: Int, onAdd: () -> Unit, onRemove: () -> Unit) {
+private fun WaterCard(
+    water: Int,
+    goal: Int,
+    glassMl: Int,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    remindersOn: Boolean,
+    onReminders: () -> Unit,
+) {
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconBadge(Icons.Filled.WaterDrop, AppColors.Water)
@@ -440,6 +453,13 @@ private fun WaterCard(water: Int, goal: Int, glassMl: Int, onAdd: () -> Unit, on
                     "${fmt(water / 1000.0, 2)} / ${fmt(goal / 1000.0, 2)} l · ${(water * 100 / goal.coerceAtLeast(1))}%",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onReminders) {
+                Icon(
+                    if (remindersOn) Icons.Filled.NotificationsActive else Icons.Filled.NotificationsNone,
+                    contentDescription = "Emlékeztetők",
+                    tint = if (remindersOn) AppColors.Water else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             IconButton(onClick = onRemove, enabled = water > 0) {

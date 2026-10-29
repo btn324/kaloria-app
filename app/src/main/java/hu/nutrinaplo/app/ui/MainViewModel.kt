@@ -13,7 +13,9 @@ import hu.nutrinaplo.app.core.Gemini
 import hu.nutrinaplo.app.core.OpenFoodFacts
 import hu.nutrinaplo.app.core.Profile
 import hu.nutrinaplo.app.core.WeightEntry
-import hu.nutrinaplo.app.data.Repository
+import hu.nutrinaplo.app.core.Reminders
+import hu.nutrinaplo.app.data.Store
+import hu.nutrinaplo.app.notify.Notifications
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,8 +24,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
@@ -57,14 +57,12 @@ sealed interface AiState {
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repo = Repository(app)
-    private val saveMutex = Mutex()
+    private val repo = Store.repository(app)
 
-    private val _data = MutableStateFlow(AppData())
-    val data: StateFlow<AppData> = _data
+    private val _data get() = Store.data
+    val data: StateFlow<AppData> = Store.data
 
-    private val _loaded = MutableStateFlow(false)
-    val loaded: StateFlow<Boolean> = _loaded
+    val loaded: StateFlow<Boolean> = Store.loaded
 
     private val _db = MutableStateFlow<FoodDb?>(null)
     val db: StateFlow<FoodDb?> = _db
@@ -116,8 +114,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            _data.value = repo.load()
-            _loaded.value = true
+            Store.ensureLoaded(app)
+            Notifications.schedule(app, Store.data.value.reminders)
         }
         viewModelScope.launch {
             try {
@@ -130,11 +128,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun update(fn: (AppData) -> AppData) {
-        val newData = fn(_data.value)
-        _data.value = newData
-        viewModelScope.launch {
-            saveMutex.withLock { repo.save(_data.value) }
-        }
+        Store.update(fn)
+    }
+
+    fun updateReminders(r: Reminders) {
+        update { it.copy(reminders = r) }
+        Notifications.schedule(getApplication(), r)
+    }
+
+    fun testNotification() {
+        Notifications.showTest(getApplication(), _data.value)
     }
 
     fun toast(msg: String) {

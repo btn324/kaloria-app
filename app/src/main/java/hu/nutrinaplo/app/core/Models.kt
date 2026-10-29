@@ -90,6 +90,26 @@ data class Profile(
     val setupDone: Boolean = false,
 )
 
+/** Értesítések / emlékeztetők beállításai. Az időpontok a nap perceiben (pl. 8:30 = 510). */
+@Serializable
+data class Reminders(
+    val enabled: Boolean = false,
+    val waterEnabled: Boolean = true,
+    val waterIntervalMin: Int = 90,
+    val waterStart: Int = 8 * 60,
+    val waterEnd: Int = 21 * 60,
+    val mealsEnabled: Boolean = true,
+    val breakfast: Int = 8 * 60,
+    val lunch: Int = 12 * 60 + 30,
+    val dinner: Int = 18 * 60 + 30,
+    val summaryEnabled: Boolean = true,
+    val summary: Int = 21 * 60 + 30,
+    /** "default" = rendszerhang, "" = néma, egyébként hang URI */
+    val waterSound: String = "default",
+    val mealSound: String = "default",
+    val vibrate: Boolean = true,
+)
+
 @Serializable
 data class AppData(
     val profile: Profile = Profile(),
@@ -101,4 +121,5 @@ data class AppData(
     val favorites: List<Food> = emptyList(),
     val recents: List<Food> = emptyList(),
     val nextId: Long = 1L,
+    val reminders: Reminders = Reminders(),
 )

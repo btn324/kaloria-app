@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -97,7 +99,7 @@ fun NumberField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(vm: MainViewModel) {
+fun ProfileScreen(vm: MainViewModel, onReminders: () -> Unit) {
     val data by vm.data.collectAsState()
     val p = data.profile
     val context = LocalContext.current
@@ -178,6 +180,24 @@ fun ProfileScreen(vm: MainViewModel) {
                 KeyValue("Alapanyagcsere (BMR)", "${Calc.bmr(p).roundToInt()} kcal")
                 KeyValue("Napi energiaigény (TDEE)", "${Calc.tdee(p).roundToInt()} kcal")
                 KeyValue("BMI", "${fmt(bmi, 1)} – ${Calc.bmiLabel(bmi)}")
+            }
+        }
+
+        item {
+            AppCard(Modifier.clickable { onReminders() }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconBadge(Icons.Filled.NotificationsActive, AppColors.Water)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Értesítések és emlékeztetők", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (data.reminders.enabled) "Bekapcsolva · víz, étkezések, esti összegzés" else "Víz, étkezések, esti összegzés, hangválasztás",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                }
             }
         }
 

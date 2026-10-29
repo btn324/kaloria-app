@@ -83,6 +83,7 @@ object Routes {
     const val CUSTOM = "custom"
     const val AI_PHOTO = "ai/photo"
     const val AI_TEXT = "ai/text"
+    const val REMINDERS = "reminders"
 }
 
 private data class NavTab(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
@@ -176,11 +177,13 @@ private fun MainShell(vm: MainViewModel) {
                     vm = vm,
                     onAdd = { meal -> openAdd(meal) },
                     onOpenNutrients = { nav.goTab(Routes.NUTRIENTS) },
+                    onReminders = { nav.navigate(Routes.REMINDERS) },
                 )
             }
             composable(Routes.NUTRIENTS) { NutrientsScreen(vm) }
             composable(Routes.STATS) { StatsScreen(vm) }
-            composable(Routes.PROFILE) { ProfileScreen(vm) }
+            composable(Routes.PROFILE) { ProfileScreen(vm, onReminders = { nav.navigate(Routes.REMINDERS) }) }
+            composable(Routes.REMINDERS) { RemindersScreen(vm, onBack = { nav.popBackStack() }) }
             composable(Routes.ADD) {
                 AddFoodScreen(
                     vm = vm,
