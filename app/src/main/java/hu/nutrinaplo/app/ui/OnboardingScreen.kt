@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -290,13 +289,14 @@ private fun StepGoal(p: Profile, onChange: (Profile) -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text("Heti tempó", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             listOf(0.25 to "Lassú", 0.5 to "Ajánlott", 0.75 to "Gyors").forEach { (r, l) ->
-                FilterChip(
+                RateTile(
                     selected = p.weeklyRate == r,
-                    onClick = { onChange(p.copy(weeklyRate = r)) },
-                    label = { Text("$l · ${fmt(r, 2)} kg") },
-                )
+                    title = l,
+                    value = "${fmt(r, 2)} kg/hét",
+                    modifier = Modifier.weight(1f),
+                ) { onChange(p.copy(weeklyRate = r)) }
             }
         }
     }
@@ -365,5 +365,31 @@ private fun SummaryTile(label: String, value: String, color: androidx.compose.ui
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = color)
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun RateTile(selected: Boolean, title: String, value: String, modifier: Modifier, onClick: () -> Unit) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        border = BorderStroke(2.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
     }
 }

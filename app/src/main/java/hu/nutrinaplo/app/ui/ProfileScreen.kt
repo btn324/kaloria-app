@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
@@ -249,12 +251,12 @@ fun ProfileScreen(vm: MainViewModel) {
                 if (p.goal != Goal.MAINTAIN) {
                     Spacer(Modifier.height(10.dp))
                     Text("Tempó (kg / hét)", style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(0.25, 0.5, 0.75, 1.0).forEach { r ->
                             FilterChip(
                                 selected = p.weeklyRate == r,
                                 onClick = { set(p.copy(weeklyRate = r)) },
-                                label = { Text(fmt(r, 2)) },
+                                label = { Text("${fmt(r, 2)} kg") },
                             )
                         }
                     }
@@ -289,7 +291,7 @@ fun ProfileScreen(vm: MainViewModel) {
                     set(p.copy(fatPct = v.coerceAtMost(100 - p.proteinPct), carbPct = carb))
                 }
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(false, onClick = { set(p.copy(proteinPct = 25, carbPct = 45, fatPct = 30)) }, label = { Text("Kiegyensúlyozott") })
                     FilterChip(false, onClick = { set(p.copy(proteinPct = 35, carbPct = 35, fatPct = 30)) }, label = { Text("Magas fehérje") })
                     FilterChip(false, onClick = { set(p.copy(proteinPct = 25, carbPct = 15, fatPct = 60)) }, label = { Text("Low-carb") })
