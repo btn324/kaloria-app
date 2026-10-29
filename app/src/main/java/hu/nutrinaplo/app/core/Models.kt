@@ -104,10 +104,11 @@ data class Reminders(
     val dinner: Int = 18 * 60 + 30,
     val summaryEnabled: Boolean = true,
     val summary: Int = 21 * 60 + 30,
-    /** "default" = rendszerhang, "" = néma, egyébként hang URI */
-    val waterSound: String = "default",
-    val mealSound: String = "default",
+    /** "app:nn_drop" = saját hang, "default" = rendszerhang, "" = néma, egyébként hang URI */
+    val waterSound: String = "app:nn_drop",
+    val mealSound: String = "app:nn_chime",
     val vibrate: Boolean = true,
+    val soundsMigrated: Boolean = false,
 )
 
 @Serializable

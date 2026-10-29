@@ -115,6 +115,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             Store.ensureLoaded(app)
+            // régebbi verzióról: a rendszerhang helyett az app saját hangjai legyenek az alapértelmezettek
+            val r0 = Store.data.value.reminders
+            if (!r0.soundsMigrated) {
+                Store.update {
+                    it.copy(
+                        reminders = r0.copy(
+                            waterSound = if (r0.waterSound == "default") "app:nn_drop" else r0.waterSound,
+                            mealSound = if (r0.mealSound == "default") "app:nn_chime" else r0.mealSound,
+                            soundsMigrated = true,
+                        )
+                    )
+                }
+            }
             Notifications.schedule(app, Store.data.value.reminders)
         }
         viewModelScope.launch {

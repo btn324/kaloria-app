@@ -76,6 +76,7 @@ fun RemindersScreen(vm: MainViewModel, onBack: () -> Unit) {
 
     var timeEdit by remember { mutableStateOf<Pair<String, Int>?>(null) } // (melyik, perc)
     var soundTarget by remember { mutableStateOf("water") }
+    var soundDialog by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) set(r.copy(enabled = true))
@@ -97,12 +98,13 @@ fun RemindersScreen(vm: MainViewModel, onBack: () -> Unit) {
 
     fun pickSound(target: String) {
         soundTarget = target
+        soundDialog = true
+    }
+
+    fun systemPicker(target: String) {
+        soundTarget = target
         val current = if (target == "water") r.waterSound else r.mealSound
-        val existing: Uri? = when (current) {
-            "" -> null
-            "default" -> Settings.System.DEFAULT_NOTIFICATION_URI
-            else -> Uri.parse(current)
-        }
+        val existing: Uri? = Notifications.soundUri(context, current)
         val i = Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
             .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
             .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Értesítési hang")
@@ -170,7 +172,7 @@ fun RemindersScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Text("Gyakoriság", style = MaterialTheme.typography.labelLarge)
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(60 to "Óránként", 90 to "1,5 óránként", 120 to "2 óránként", 180 to "3 óránként").forEach { (m, l) ->
+                        listOf(30 to "30 percenként", 45 to "45 percenként", 60 to "Óránként", 90 to "1,5 óránként", 120 to "2 óránként", 180 to "3 óránként").forEach { (m, l) ->
                             FilterChip(selected = r.waterIntervalMin == m, onClick = { set(r.copy(waterIntervalMin = m)) }, label = { Text(l) })
                         }
                     }
@@ -286,6 +288,19 @@ fun RemindersScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
     }
 
+    if (soundDialog) {
+        val current = if (soundTarget == "water") r.waterSound else r.mealSound
+        SoundDialog(
+            current = current,
+            onDismiss = { soundDialog = false },
+            onSystem = { soundDialog = false; systemPicker(soundTarget) },
+            onPick = { v ->
+                soundDialog = false
+                if (soundTarget == "water") set(r.copy(waterSound = v)) else set(r.copy(mealSound = v))
+            },
+        )
+    }
+
     timeEdit?.let { (which, minutes) ->
         TimeDialog(
             initial = minutes,
@@ -376,6 +391,57 @@ private fun TimeDialog(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> 
         title = { Text("Időpont") },
         text = { TimePicker(state = state) },
         confirmButton = { TextButton(onClick = { onConfirm(state.hour * 60 + state.minute) }) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Mégse") } },
+    )
+}
+
+@Composable
+private fun SoundDialog(current: String, onDismiss: () -> Unit, onSystem: () -> Unit, onPick: (String) -> Unit) {
+    val context = LocalContext.current
+    var selected by remember { mutableStateOf(current) }
+    val player = remember { arrayOfNulls<android.media.Ringtone>(1) }
+    fun preview(v: String) {
+        player[0]?.stop()
+        val uri = Notifications.soundUri(context, v) ?: return
+        player[0] = try {
+            RingtoneManager.getRingtone(context, uri)?.also { it.play() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { player[0]?.stop() } }
+    val options = Notifications.appSounds.map { it.first to it.second + " (NutriNapló)" } +
+        listOf("default" to "Telefon alapértelmezett hangja", "" to "Néma")
+    val isCustom = selected.isNotEmpty() && selected != "default" && !selected.startsWith("app:")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Értesítési hang") },
+        text = {
+            Column {
+                options.forEach { (v, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { selected = v; preview(v) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = selected == v, onClick = { selected = v; preview(v) })
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                if (isCustom) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.RadioButton(selected = true, onClick = {})
+                        Text(Notifications.soundName(context, selected), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                TextButton(onClick = onSystem) { Text("Másik hang a telefonról…") }
+                Text(
+                    "Koppints egy hangra a meghallgatáshoz.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(selected) }) { Text("OK") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Mégse") } },
     )
 }

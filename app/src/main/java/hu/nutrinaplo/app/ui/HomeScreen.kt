@@ -129,6 +129,7 @@ fun HomeScreen(
     val waterGoal = Calc.waterGoal(p)
     var editing by remember { mutableStateOf<DiaryEntry?>(null) }
     var pickDate by remember { mutableStateOf(false) }
+    var showDay by remember { mutableStateOf(false) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -148,6 +149,7 @@ fun HomeScreen(
         }
         item {
             HeroCard(
+                onClick = { showDay = true },
                 eaten = totals.kcal,
                 goal = kcalGoal,
                 protein = totals.v(Nutrients.PROTEIN) to macros.protein,
@@ -200,6 +202,15 @@ fun HomeScreen(
                 )
             }
         }
+    }
+
+    if (showDay) {
+        DaySheet(
+            date = date,
+            entries = entries,
+            onDismiss = { showDay = false },
+            onEntry = { showDay = false; editing = it },
+        )
     }
 
     editing?.let { e ->
@@ -348,6 +359,7 @@ private fun WeekStrip(selected: LocalDate, loggedDays: Set<String>, onSelect: (L
 
 @Composable
 private fun HeroCard(
+    onClick: () -> Unit,
     eaten: Double,
     goal: Int,
     protein: Pair<Double, Double>,
@@ -362,6 +374,7 @@ private fun HeroCard(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.extraLarge)
             .background(gradient)
+            .clickable(onClick = onClick)
             .padding(20.dp)
     ) {
         Column {
@@ -399,6 +412,20 @@ private fun HeroCard(
                 HeroMacro("Fehérje", protein, Modifier.weight(1f))
                 HeroMacro("Szénhidrát", carbs, Modifier.weight(1f))
                 HeroMacro("Zsír", fat, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Mai ételek megtekintése",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.9f),
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
     }
@@ -443,6 +470,7 @@ private fun WaterCard(
     remindersOn: Boolean,
     onReminders: () -> Unit,
 ) {
+    val pct = (water * 100 / goal.coerceAtLeast(1))
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconBadge(Icons.Filled.WaterDrop, AppColors.Water)
@@ -450,11 +478,18 @@ private fun WaterCard(
             Column(Modifier.weight(1f)) {
                 Text("Víz", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "${fmt(water / 1000.0, 2)} / ${fmt(goal / 1000.0, 2)} l · ${(water * 100 / goal.coerceAtLeast(1))}%",
+                    "${fmt(water / 1000.0, 2)} / ${fmt(goal / 1000.0, 2)} liter",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
+            Text(
+                "$pct%",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.Water,
+            )
             IconButton(onClick = onReminders) {
                 Icon(
                     if (remindersOn) Icons.Filled.NotificationsActive else Icons.Filled.NotificationsNone,
@@ -462,17 +497,30 @@ private fun WaterCard(
                     tint = if (remindersOn) AppColors.Water else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = onRemove, enabled = water > 0) {
-                Icon(Icons.Filled.Remove, contentDescription = "Egy pohár levonása")
-            }
-            FilledTonalButton(onClick = onAdd) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("$glassMl ml")
-            }
         }
         Spacer(Modifier.height(12.dp))
         Bar((water.toDouble() / goal.coerceAtLeast(1)).toFloat(), AppColors.Water, height = 10.dp)
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = onRemove,
+                enabled = water > 0,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Filled.Remove, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("$glassMl ml", maxLines = 1)
+            }
+            androidx.compose.material3.Button(
+                onClick = onAdd,
+                modifier = Modifier.weight(2f),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = AppColors.Water, contentColor = Color.White),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("1 pohár ($glassMl ml)", maxLines = 1)
+            }
+        }
     }
 }
 
@@ -638,6 +686,84 @@ private fun MealCard(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DaySheet(
+    date: LocalDate,
+    entries: List<DiaryEntry>,
+    onDismiss: () -> Unit,
+    onEntry: (DiaryEntry) -> Unit,
+) {
+    val sheet = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val t = remember(entries) { Calc.totals(entries) }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            item {
+                Text(
+                    if (date == LocalDate.now()) "Mai ételek" else "${date.monthValue}. ${date.dayOfMonth}. ételei",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "${fmt(t.kcal, 0)} kcal · F ${fmt(t.v(Nutrients.PROTEIN), 0)} g · Sz ${fmt(t.v(Nutrients.CARBS), 0)} g · Zs ${fmt(t.v(Nutrients.FAT), 0)} g",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            if (entries.isEmpty()) {
+                item { EmptyHint("Ezen a napon még nincs rögzített étel. Az étkezéseknél a + gombbal adhatsz hozzá.") }
+            }
+            Meals.names.forEachIndexed { mi, name ->
+                val list = entries.filter { it.meal == mi }.sortedBy { it.time }
+                if (list.isNotEmpty()) {
+                    item(key = "h$mi") {
+                        Row(Modifier.padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconBadge(mealIcons[mi], mealColors[mi], 28)
+                            Spacer(Modifier.width(8.dp))
+                            Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(
+                                "${fmt(list.sumOf { it.amount(Nutrients.KCAL) }, 0)} kcal",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    list.forEach { e ->
+                        item(key = "e${e.id}") {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .clickable { onEntry(e) }
+                                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(e.food.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val time = if (e.time > 0) java.time.Instant.ofEpochMilli(e.time)
+                                        .atZone(java.time.ZoneId.systemDefault()).toLocalTime().let { "%02d:%02d · ".format(it.hour, it.minute) } else ""
+                                    Text(
+                                        time + "${fmt(e.grams, 0)} g · F ${fmt(e.amount(Nutrients.PROTEIN), 0)} · Sz ${fmt(e.amount(Nutrients.CARBS), 0)} · Zs ${fmt(e.amount(Nutrients.FAT), 0)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Text("${e.amount(Nutrients.KCAL).roundToInt()} kcal", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }

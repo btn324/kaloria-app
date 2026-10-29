@@ -112,9 +112,33 @@ object Notifications {
 
     // ---------- csatornák és hangok ----------
 
-    fun soundName(ctx: Context, sound: String): String = when (sound) {
-        "" -> "Néma"
-        "default" -> "Alapértelmezett"
+    /** Az app saját értesítési hangjai (res/raw). */
+    val appSounds: List<Pair<String, String>> = listOf(
+        "app:nn_drop" to "Vízcsepp",
+        "app:nn_bubble" to "Buborék",
+        "app:nn_chime" to "Csengő",
+        "app:nn_melody" to "Dallam",
+    )
+
+    private fun rawId(name: String): Int = when (name) {
+        "nn_drop" -> R.raw.nn_drop
+        "nn_bubble" -> R.raw.nn_bubble
+        "nn_chime" -> R.raw.nn_chime
+        "nn_melody" -> R.raw.nn_melody
+        else -> R.raw.nn_drop
+    }
+
+    fun soundUri(ctx: Context, sound: String): Uri? = when {
+        sound == "" -> null
+        sound == "default" -> Settings.System.DEFAULT_NOTIFICATION_URI
+        sound.startsWith("app:") -> Uri.parse("android.resource://${ctx.packageName}/${rawId(sound.removePrefix("app:"))}")
+        else -> Uri.parse(sound)
+    }
+
+    fun soundName(ctx: Context, sound: String): String = when {
+        sound == "" -> "Néma"
+        sound == "default" -> "Telefon alapértelmezett hangja"
+        sound.startsWith("app:") -> (appSounds.firstOrNull { it.first == sound }?.second ?: "NutriNapló hang") + " (NutriNapló)"
         else -> try {
             RingtoneManager.getRingtone(ctx, Uri.parse(sound))?.getTitle(ctx) ?: "Egyedi hang"
         } catch (e: Exception) {
@@ -139,11 +163,8 @@ object Notifications {
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
-            when (sound) {
-                "" -> ch.setSound(null, null)
-                "default" -> ch.setSound(Settings.System.DEFAULT_NOTIFICATION_URI, attrs)
-                else -> ch.setSound(Uri.parse(sound), attrs)
-            }
+            val uri = soundUri(ctx, sound)
+            if (uri == null) ch.setSound(null, null) else ch.setSound(uri, attrs)
             ch.enableVibration(vibrate)
             if (vibrate) ch.vibrationPattern = longArrayOf(0, 250, 150, 250)
             nm.createNotificationChannel(ch)
