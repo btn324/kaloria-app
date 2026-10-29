@@ -1,6 +1,8 @@
 package hu.nutrinaplo.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,7 +23,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudDownload
@@ -39,11 +41,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,6 +56,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -121,8 +127,12 @@ fun AddFoodScreen(
             .addOnFailureListener { vm.toast("A vonalkód-olvasó nem érhető el: ${it.message}") }
     }
 
+    LaunchedEffect(Unit) {
+        if (vm.consumeScanRequest()) scan()
+    }
+
     Column(Modifier.fillMaxSize().imePadding()) {
-        ScreenHeader("Hozzáadás – ${Meals.names[meal]}", onBack)
+        ScreenHeader("Mit ettél?", onBack)
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -131,10 +141,16 @@ fun AddFoodScreen(
                 FilterChip(selected = meal == i, onClick = { vm.setMeal(i) }, label = { Text(n) })
             }
         }
-        OutlinedTextField(
+        TextField(
             value = query,
             onValueChange = { vm.setQuery(it) },
-            placeholder = { Text("Keresés, pl. csirkemell, túró, pörkölt…") },
+            placeholder = { Text("Keress ételt, pl. csirkemell, túró, pörkölt…") },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) {
@@ -142,19 +158,21 @@ fun AddFoodScreen(
                 }
             },
             singleLine = true,
-            shape = MaterialTheme.shapes.large,
+            shape = RoundedCornerShape(28.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ActionChip("Vonalkód", Icons.Filled.QrCodeScanner) { scan() }
-            ActionChip("Fotó (AI)", Icons.Filled.PhotoCamera, onAiPhoto)
-            ActionChip("Leírás (AI)", Icons.Filled.AutoAwesome, onAiText)
-            ActionChip("Saját étel", Icons.Filled.EditNote, onCustom)
+        if (query.isBlank()) {
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SmallTile("Vonalkód", Icons.Filled.QrCodeScanner, Color(0xFF8B6CF2), Modifier.weight(1f)) { scan() }
+                SmallTile("Fotó", Icons.Filled.PhotoCamera, AppColors.Kcal, Modifier.weight(1f), onAiPhoto)
+                SmallTile("Leírás", Icons.Filled.AutoAwesome, Color(0xFFE879A9), Modifier.weight(1f), onAiText)
+                SmallTile("Saját", Icons.Filled.EditNote, MaterialTheme.colorScheme.primary, Modifier.weight(1f), onCustom)
+            }
         }
         Spacer(Modifier.height(8.dp))
         if (onlineLoading && query.isBlank()) {
@@ -190,7 +208,7 @@ fun AddFoodScreen(
                         )
                     }
                 }
-                items(list, key = { "l" + it.id }) { f -> FoodRow(f) { selected = f } }
+                items(list, key = { "l" + it.id }) { f -> FoodRow(f, onQuickAdd = { vm.quickAdd(f) }) { selected = f } }
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -206,7 +224,7 @@ fun AddFoodScreen(
                 if (db != null && results.isEmpty()) {
                     item { EmptyHint("Nincs találat a beépített adatbázisban.", Modifier.padding(horizontal = 16.dp)) }
                 }
-                items(results, key = { "r" + it.id }) { f -> FoodRow(f) { selected = f } }
+                items(results, key = { "r" + it.id }) { f -> FoodRow(f, onQuickAdd = { vm.quickAdd(f) }) { selected = f } }
                 item {
                     Column(Modifier.padding(16.dp)) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -229,7 +247,7 @@ fun AddFoodScreen(
                         }
                     }
                 }
-                items(online, key = { "o" + it.id }) { f -> FoodRow(f) { selected = f } }
+                items(online, key = { "o" + it.id }) { f -> FoodRow(f, onQuickAdd = { vm.quickAdd(f) }) { selected = f } }
             }
         }
     }
@@ -253,6 +271,28 @@ fun AddFoodScreen(
 }
 
 @Composable
+private fun SmallTile(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.large)
+            .background(color.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, tint = color)
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
 private fun ActionChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     AssistChip(
         onClick = onClick,
@@ -262,7 +302,7 @@ private fun ActionChip(label: String, icon: androidx.compose.ui.graphics.vector.
 }
 
 @Composable
-fun FoodRow(f: Food, onClick: () -> Unit) {
+fun FoodRow(f: Food, onQuickAdd: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -290,11 +330,14 @@ fun FoodRow(f: Food, onClick: () -> Unit) {
             Text("${fmt(f.kcal, 0)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("kcal/100 g", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(
-            Icons.Filled.AddCircleOutline,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 10.dp),
-        )
+        Spacer(Modifier.width(6.dp))
+        IconButton(onClick = onQuickAdd ?: onClick) {
+            Icon(
+                Icons.Filled.AddCircle,
+                contentDescription = "Gyors hozzáadás",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(30.dp),
+            )
+        }
     }
 }

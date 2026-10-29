@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -149,6 +150,11 @@ fun FoodSheet(
             // összefoglaló
             AppCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    MacroDonut(
+                        food.value(Nutrients.PROTEIN), food.value(Nutrients.CARBS), food.value(Nutrients.FAT),
+                        Modifier.size(56.dp),
+                    )
+                    Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             "${fmt(amt(Nutrients.KCAL), 0)} kcal",

@@ -1,9 +1,12 @@
 package hu.nutrinaplo.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,38 +16,60 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BakeryDining
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.LocalDrink
+import androidx.compose.material.icons.filled.Cookie
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DinnerDining
+import androidx.compose.material.icons.filled.FreeBreakfast
+import androidx.compose.material.icons.filled.Icecream
+import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,10 +77,33 @@ import hu.nutrinaplo.app.core.Calc
 import hu.nutrinaplo.app.core.DiaryEntry
 import hu.nutrinaplo.app.core.Meals
 import hu.nutrinaplo.app.core.Nutrients
+import hu.nutrinaplo.app.core.Status
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 import kotlin.math.roundToInt
+
+val mealIcons: List<ImageVector> = listOf(
+    Icons.Filled.FreeBreakfast,
+    Icons.Filled.BakeryDining,
+    Icons.Filled.LunchDining,
+    Icons.Filled.Icecream,
+    Icons.Filled.DinnerDining,
+    Icons.Filled.Cookie,
+)
+
+val mealColors: List<Color> = listOf(
+    Color(0xFFF5A524), Color(0xFF8B6CF2), Color(0xFF12A15F),
+    Color(0xFFEF5D60), Color(0xFF2F9BF5), Color(0xFFE879A9),
+)
+
+private val dayLetters = listOf("H", "K", "Sze", "Cs", "P", "Szo", "V")
+
+private const val WEEKS_BACK = 260
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,13 +111,13 @@ fun HomeScreen(
     vm: MainViewModel,
     onAdd: (Int) -> Unit,
     onOpenNutrients: () -> Unit,
-    onOpenProfile: () -> Unit,
 ) {
     val data by vm.data.collectAsState()
     val date by vm.date.collectAsState()
     val p = data.profile
     val dayKey = date.toString()
     val entries = remember(data.entries, dayKey) { data.entries.filter { it.date == dayKey } }
+    val loggedDays = remember(data.entries) { data.entries.map { it.date }.toHashSet() }
     val totals = remember(entries) { Calc.totals(entries) }
     val targets = remember(p) { Calc.targets(p) }
     val kcalGoal = Calc.kcalTarget(p)
@@ -81,179 +129,72 @@ fun HomeScreen(
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // fejléc: dátumváltó
         item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = { vm.shiftDate(-1) }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Előző nap")
-                }
-                Column(
-                    Modifier.weight(1f).clickable { pickDate = true },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(dateLabel(date), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(
-                        "${date.year}. ${date.monthValue}. ${date.dayOfMonth}.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = { vm.shiftDate(1) }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Következő nap")
-                }
-            }
+            Header(
+                name = p.name,
+                date = date,
+                onCalendar = { pickDate = true },
+                onToday = { vm.setDate(LocalDate.now()) },
+            )
         }
-
-        if (!p.setupDone) {
-            item {
-                AppCard(Modifier.clickable { onOpenProfile() }) {
-                    Text("Üdv a NutriNaplóban! 👋", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Állítsd be a profilodat (nem, kor, magasság, súly, cél), hogy pontos kalória-, makró- és vitamincélokat számoljunk. Koppints ide.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // kalória kártya
         item {
-            AppCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        StatLine("Bevitt", "${fmt(totals.kcal, 0)} kcal")
-                        Spacer(Modifier.height(10.dp))
-                        StatLine("Cél", "${fmt(kcalGoal.toDouble(), 0)} kcal")
-                    }
-                    val remaining = kcalGoal - totals.kcal
-                    val over = remaining < 0
-                    Ring(
-                        fraction = (totals.kcal / kcalGoal).toFloat(),
-                        color = if (over) AppColors.Deficient else AppColors.Kcal,
-                        modifier = Modifier.size(150.dp),
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                fmt(kotlin.math.abs(remaining), 0),
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                if (over) "kcal túllépés" else "kcal maradt",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    MacroColumn("Fehérje", totals.v(Nutrients.PROTEIN), macros.protein, AppColors.Protein, Modifier.weight(1f))
-                    MacroColumn("Szénhidrát", totals.v(Nutrients.CARBS), macros.carbs, AppColors.Carbs, Modifier.weight(1f))
-                    MacroColumn("Zsír", totals.v(Nutrients.FAT), macros.fat, AppColors.Fat, Modifier.weight(1f))
-                }
-            }
+            WeekStrip(selected = date, loggedDays = loggedDays, onSelect = { vm.setDate(it) })
         }
-
-        // víz
         item {
-            AppCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.WaterDrop, contentDescription = null, tint = AppColors.Water)
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Vízfogyasztás", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "${fmt(water / 1000.0, 2)} / ${fmt(waterGoal / 1000.0, 2)} liter",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    FilledTonalIconButton(onClick = { vm.addWater(-p.glassMl) }, enabled = water > 0) {
-                        Icon(Icons.Filled.Remove, contentDescription = "Pohár levonása")
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    FilledTonalIconButton(onClick = { vm.addWater(p.glassMl) }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Pohár hozzáadása")
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                val glasses = (waterGoal + p.glassMl - 1) / p.glassMl
-                val drunk = water / p.glassMl
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
-                    for (i in 0 until glasses.coerceAtMost(16)) {
-                        Icon(
-                            if (i < drunk) Icons.Filled.WaterDrop else Icons.Outlined.WaterDrop,
-                            contentDescription = null,
-                            tint = if (i < drunk) AppColors.Water else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.weight(1f).size(22.dp).clickable {
-                                vm.addWater((i + 1) * p.glassMl - water)
-                            },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.LocalDrink, contentDescription = null, modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "1 pohár = ${p.glassMl} ml · koppints egy cseppre a gyors beállításhoz",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            HeroCard(
+                eaten = totals.kcal,
+                goal = kcalGoal,
+                protein = totals.v(Nutrients.PROTEIN) to macros.protein,
+                carbs = totals.v(Nutrients.CARBS) to macros.carbs,
+                fat = totals.v(Nutrients.FAT) to macros.fat,
+            )
         }
-
-        // tápanyag gyorsjelentés
         item {
-            val defs = Calc.deficiencies(totals, targets)
-            val severe = defs.filter { it.status == hu.nutrinaplo.app.core.Status.DEFICIENT }
-            AppCard(Modifier.clickable { onOpenNutrients() }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Vitaminok és ásványi anyagok", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            when {
-                                entries.isEmpty() -> "Még nincs bejegyzés ezen a napon."
-                                defs.isEmpty() -> "Minden tápanyag megfelelő szinten van. 🎉"
-                                else -> "${severe.size} hiányos, ${defs.size - severe.size} alacsony – koppints a részletekért"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-                }
-                if (entries.isNotEmpty() && defs.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    defs.take(4).forEach { s ->
-                        NutrientRow(s)
-                    }
-                }
-            }
+            WaterCard(
+                water = water,
+                goal = waterGoal,
+                glassMl = p.glassMl,
+                onAdd = { vm.addWater(p.glassMl) },
+                onRemove = { vm.addWater(-p.glassMl) },
+            )
         }
-
-        // étkezések
+        item {
+            VitaminCard(
+                hasEntries = entries.isNotEmpty(),
+                totals = totals,
+                targets = targets,
+                coverage = totals.microCoveragePct,
+                onClick = onOpenNutrients,
+            )
+        }
+        item {
+            Text(
+                "Étkezések",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
         Meals.names.forEachIndexed { mi, mealName ->
             item(key = "meal$mi") {
-                val list = entries.filter { it.meal == mi }
                 MealCard(
+                    index = mi,
                     name = mealName,
-                    entries = list,
+                    target = kcalGoal * Meals.shares[mi],
+                    entries = entries.filter { it.meal == mi },
                     onAdd = { onAdd(mi) },
                     onCopyYesterday = { vm.copyMealFromYesterday(mi) },
                     onEntry = { editing = it },
+                    onDelete = { e ->
+                        vm.deleteEntry(e.id)
+                        vm.toast("${e.food.name} törölve")
+                    },
                 )
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 
     editing?.let { e ->
@@ -261,7 +202,7 @@ fun HomeScreen(
             food = e.food,
             initialGrams = e.grams,
             initialMeal = e.meal,
-            isFavorite = vm.isFavorite(e.food),
+            isFavorite = data.favorites.any { it.id == e.food.id },
             confirmLabel = "Mentés",
             onDismiss = { editing = null },
             onConfirm = { g, m -> vm.updateEntry(e.id, g, m); editing = null },
@@ -284,9 +225,7 @@ fun HomeScreen(
                     pickDate = false
                 }) { Text("OK") }
             },
-            dismissButton = {
-                TextButton(onClick = { vm.setDate(LocalDate.now()); pickDate = false }) { Text("Ma") }
-            },
+            dismissButton = { TextButton(onClick = { pickDate = false }) { Text("Mégse") } },
         ) {
             DatePicker(state = state)
         }
@@ -294,37 +233,331 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StatLine(label: String, value: String) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+private fun Header(name: String, date: LocalDate, onCalendar: () -> Unit, onToday: () -> Unit) {
+    val today = LocalDate.now()
+    val greeting = when (java.time.LocalTime.now().hour) {
+        in 4..9 -> "Jó reggelt"
+        in 10..17 -> "Szia"
+        else -> "Jó estét"
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (name.isBlank()) "$greeting!" else "$greeting, ${name.trim()}!",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val month = date.month.getDisplayName(TextStyle.FULL, HU)
+            val dow = date.dayOfWeek.getDisplayName(TextStyle.FULL, HU)
+            Text(
+                (if (date == today) "Ma · " else if (date == today.minusDays(1)) "Tegnap · " else "") +
+                    "$month ${date.dayOfMonth}., $dow",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (date != today) {
+            IconButton(onClick = onToday) { Icon(Icons.Filled.Today, contentDescription = "Ugrás a mai napra") }
+        }
+        FilledTonalIconButton(onClick = onCalendar) {
+            Icon(Icons.Filled.CalendarMonth, contentDescription = "Naptár")
+        }
+    }
+}
+
+/** Heti naptársáv: lapozható hetek, a mai hét az utolsó oldal. */
+@Composable
+private fun WeekStrip(selected: LocalDate, loggedDays: Set<String>, onSelect: (LocalDate) -> Unit) {
+    val today = LocalDate.now()
+    val thisMonday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val selMonday = selected.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    fun pageOf(monday: LocalDate) =
+        (WEEKS_BACK - 1 - ChronoUnit.WEEKS.between(monday, thisMonday).toInt()).coerceIn(0, WEEKS_BACK - 1)
+
+    val pager = rememberPagerState(initialPage = pageOf(selMonday)) { WEEKS_BACK }
+    LaunchedEffect(selMonday) {
+        val target = pageOf(selMonday)
+        if (pager.currentPage != target) pager.animateScrollToPage(target)
+    }
+
+    HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth()) { page ->
+        val monday = thisMonday.minusWeeks((WEEKS_BACK - 1 - page).toLong())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            for (i in 0..6) {
+                val d = monday.plusDays(i.toLong())
+                val isSel = d == selected
+                val isToday = d == today
+                val future = d.isAfter(today)
+                val logged = loggedDays.contains(d.toString())
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(enabled = !future) { onSelect(d) }
+                        .padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        dayLetters[i],
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    val bg = when {
+                        isSel -> MaterialTheme.colorScheme.primary
+                        else -> Color.Transparent
+                    }
+                    val fg = when {
+                        isSel -> MaterialTheme.colorScheme.onPrimary
+                        future -> MaterialTheme.colorScheme.outline
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(bg)
+                            .then(
+                                if (isToday && !isSel) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                else Modifier
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("${d.dayOfMonth}", color = fg, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(if (logged) AppColors.Kcal else Color.Transparent)
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
+private fun HeroCard(
+    eaten: Double,
+    goal: Int,
+    protein: Pair<Double, Double>,
+    carbs: Pair<Double, Double>,
+    fat: Pair<Double, Double>,
+) {
+    val remaining = goal - eaten
+    val over = remaining < 0
+    val gradient = Brush.linearGradient(listOf(Color(0xFF12A15F), Color(0xFF0B7F86)))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(gradient)
+            .padding(20.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Ring(
+                    fraction = (eaten / goal).toFloat(),
+                    color = if (over) Color(0xFFFFC2B3) else Color.White,
+                    track = Color.White.copy(alpha = 0.22f),
+                    stroke = 12.dp,
+                    modifier = Modifier.size(140.dp),
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            fmt(kotlin.math.abs(remaining), 0),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                        Text(
+                            if (over) "kcal felett" else "kcal maradt",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(20.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HeroStat("Napi cél", "${fmt(goal.toDouble(), 0)} kcal")
+                    HeroStat("Elfogyasztva", "${fmt(eaten, 0)} kcal")
+                    HeroStat("Teljesítve", "${(eaten / goal * 100).roundToInt()}%")
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                HeroMacro("Fehérje", protein, Modifier.weight(1f))
+                HeroMacro("Szénhidrát", carbs, Modifier.weight(1f))
+                HeroMacro("Zsír", fat, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroStat(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+    }
+}
+
+@Composable
+private fun HeroMacro(label: String, v: Pair<Double, Double>, modifier: Modifier) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.85f))
+        Spacer(Modifier.height(5.dp))
+        Bar(
+            if (v.second > 0) (v.first / v.second).toFloat() else 0f,
+            Color.White,
+            height = 6.dp,
+            track = Color.White.copy(alpha = 0.22f),
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            "${fmt(v.first, 0)} / ${fmt(v.second, 0)} g",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
+        )
+    }
+}
+
+@Composable
+private fun WaterCard(water: Int, goal: Int, glassMl: Int, onAdd: () -> Unit, onRemove: () -> Unit) {
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Filled.WaterDrop, AppColors.Water)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Víz", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${fmt(water / 1000.0, 2)} / ${fmt(goal / 1000.0, 2)} l · ${(water * 100 / goal.coerceAtLeast(1))}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onRemove, enabled = water > 0) {
+                Icon(Icons.Filled.Remove, contentDescription = "Egy pohár levonása")
+            }
+            FilledTonalButton(onClick = onAdd) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("$glassMl ml")
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Bar((water.toDouble() / goal.coerceAtLeast(1)).toFloat(), AppColors.Water, height = 10.dp)
+    }
+}
+
+@Composable
+private fun VitaminCard(
+    hasEntries: Boolean,
+    totals: hu.nutrinaplo.app.core.DayTotals,
+    targets: Map<String, hu.nutrinaplo.app.core.Target>,
+    coverage: Double,
+    onClick: () -> Unit,
+) {
+    val defs = remember(totals, targets) { Calc.deficiencies(totals, targets) }
+    val micros = remember(totals, targets) {
+        Calc.statuses(totals, targets, Nutrients.micros).filter { it.target?.isLimit == false }
+    }
+    AppCard(Modifier.clickable { onClick() }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Filled.CheckCircle, AppColors.Ok)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Vitaminok és ásványi anyagok", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (!hasEntries) "Rögzíts ételt, és megmutatjuk, mi hiányzik." else "Koppints a részletes elemzésért",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+        }
+        if (hasEntries) {
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CountChip(micros.count { it.status == Status.OK }, "rendben", AppColors.Ok, Modifier.weight(1f))
+                CountChip(micros.count { it.status == Status.LOW }, "alacsony", AppColors.Low, Modifier.weight(1f))
+                CountChip(micros.count { it.status == Status.DEFICIENT }, "hiányos", AppColors.Deficient, Modifier.weight(1f))
+            }
+            if (defs.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Legnagyobb hiány: " + defs.take(3).joinToString(", ") { "${it.def.label.substringBefore(" (")} ${it.pct.roundToInt()}%" },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (coverage < 85) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "A kalóriák ${coverage.roundToInt()}%-ához van vitaminadat – a hiány valójában kisebb lehet.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CountChip(n: Int, label: String, color: Color, modifier: Modifier) {
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(color.copy(alpha = 0.12f))
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("$n", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+    }
+}
+
+@Composable
+fun IconBadge(icon: ImageVector, color: Color, size: Int = 40) {
+    Box(
+        Modifier.size(size.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size((size * 0.55).dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun MealCard(
+    index: Int,
     name: String,
+    target: Double,
     entries: List<DiaryEntry>,
     onAdd: () -> Unit,
     onCopyYesterday: () -> Unit,
     onEntry: (DiaryEntry) -> Unit,
+    onDelete: (DiaryEntry) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val kcal = entries.sumOf { it.amount(Nutrients.KCAL) }
-    AppCard(padding = 12.dp) {
+    val color = mealColors[index]
+    AppCard(padding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).padding(start = 4.dp)) {
+            IconBadge(mealIcons[index], color, 44)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (entries.isNotEmpty()) {
-                    val p = entries.sumOf { it.amount(Nutrients.PROTEIN) }
-                    val c = entries.sumOf { it.amount(Nutrients.CARBS) }
-                    val f = entries.sumOf { it.amount(Nutrients.FAT) }
-                    Text(
-                        "${fmt(kcal, 0)} kcal · F ${fmt(p, 0)} g · Sz ${fmt(c, 0)} g · Zs ${fmt(f, 0)} g",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    "${fmt(kcal, 0)} / ${fmt(target, 0)} kcal",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Továbbiak") }
@@ -336,25 +569,57 @@ private fun MealCard(
                     )
                 }
             }
-            FilledTonalIconButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "Hozzáadás: $name") }
+            FilledIconButton(
+                onClick = onAdd,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
+            ) { Icon(Icons.Filled.Add, contentDescription = "Hozzáadás: $name") }
         }
         if (entries.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(10.dp))
+            Bar((kcal / target.coerceAtLeast(1.0)).toFloat(), color, height = 4.dp)
+            Spacer(Modifier.height(6.dp))
             entries.forEachIndexed { i, e ->
                 if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    Modifier.fillMaxWidth().clickable { onEntry(e) }.padding(horizontal = 4.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(e.food.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "${fmt(e.grams, 0)} g" + (e.food.brand?.let { " · $it" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                key(e.id) {
+                    val state = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
+                        if (v == SwipeToDismissBoxValue.EndToStart) {
+                            onDelete(e); true
+                        } else false
+                    })
+                    SwipeToDismissBox(
+                        state = state,
+                        enableDismissFromStartToEnd = false,
+                        backgroundContent = {
+                            Box(
+                                Modifier.fillMaxSize().clip(MaterialTheme.shapes.small).background(AppColors.Deficient.copy(alpha = 0.15f))
+                                    .padding(end = 16.dp),
+                                contentAlignment = Alignment.CenterEnd,
+                            ) { Icon(Icons.Filled.Delete, contentDescription = "Törlés", tint = AppColors.Deficient) }
+                        },
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                .clickable { onEntry(e) }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(e.food.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${fmt(e.grams, 0)} g" + (e.food.brand?.let { " · $it" } ?: ""),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                "${e.amount(Nutrients.KCAL).roundToInt()} kcal",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
-                    Text("${e.amount(Nutrients.KCAL).roundToInt()} kcal", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 }
             }
         }

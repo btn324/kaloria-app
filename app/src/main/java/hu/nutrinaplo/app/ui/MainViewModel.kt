@@ -94,6 +94,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _meal = MutableStateFlow(Meals_suggest())
     val meal: StateFlow<Int> = _meal
 
+    /** A Hozzáadás képernyő megnyitásakor azonnal induljon-e a vonalkód-olvasó. */
+    private var scanRequested = false
+
+    fun requestScan() {
+        scanRequested = true
+    }
+
+    fun consumeScanRequest(): Boolean {
+        val r = scanRequested
+        scanRequested = false
+        return r
+    }
+
+    /** Gyors hozzáadás alapértelmezett adaggal. */
+    fun quickAdd(food: Food, meal: Int = _meal.value) {
+        val g = food.servings.firstOrNull()?.grams ?: 100.0
+        addEntry(food, g, meal)
+        toast("${food.name} hozzáadva (${g.toInt()} g) – ${hu.nutrinaplo.app.core.Meals.names[meal]}")
+    }
+
     init {
         viewModelScope.launch {
             _data.value = repo.load()

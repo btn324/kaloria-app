@@ -32,6 +32,9 @@ data class Food(
 object Meals {
     val names = listOf("Reggeli", "Tízórai", "Ebéd", "Uzsonna", "Vacsora", "Nassolás")
 
+    /** Javasolt arány a napi kalóriából étkezésenként. */
+    val shares = listOf(0.25, 0.10, 0.30, 0.10, 0.20, 0.05)
+
     /** Napszak alapján javasolt étkezés. */
     fun suggest(hour: Int): Int = when (hour) {
         in 4..9 -> 0

@@ -342,3 +342,28 @@ fun KeyValue(label: String, value: String, modifier: Modifier = Modifier) {
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
+
+/** Makró-eloszlás fánkdiagram (fehérje / szénhidrát / zsír kalóriaarány). */
+@Composable
+fun MacroDonut(protein: Double, carbs: Double, fat: Double, modifier: Modifier = Modifier, stroke: Dp = 10.dp) {
+    val pk = protein * 4
+    val ck = carbs * 4
+    val fk = fat * 9
+    val sum = pk + ck + fk
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Canvas(modifier) {
+        val sw = stroke.toPx()
+        val d = size.minDimension - sw
+        val tl = Offset((size.width - d) / 2, (size.height - d) / 2)
+        if (sum <= 0) {
+            drawArc(track, 0f, 360f, false, tl, Size(d, d), style = Stroke(sw))
+            return@Canvas
+        }
+        var start = -90f
+        listOf(pk to AppColors.Protein, ck to AppColors.Carbs, fk to AppColors.Fat).forEach { (v, c) ->
+            val sweep = (v / sum * 360).toFloat()
+            if (sweep > 0f) drawArc(c, start, (sweep - 2f).coerceAtLeast(0.5f), false, tl, Size(d, d), style = Stroke(sw, cap = StrokeCap.Butt))
+            start += sweep
+        }
+    }
+}
